@@ -90,3 +90,25 @@ bloodprint/
 
 - The current implementation uses simulated results if no actual model is available.
 - For production use, you would need to train and include a real TensorFlow model.
+
+## Deployment Instructions
+
+### Backend (Render.com)
+1. Create a new Web Service on Render
+2. Connect your GitHub repository
+3. Use these settings:
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn backend.blood_grp:app`
+   - Python Version: 3.9.13
+
+### Frontend (Render.com)
+1. Create a new Static Site on Render
+2. Connect your GitHub repository
+3. Use these settings:
+   - Build Command: `npm install && npm run build`
+   - Publish Directory: `dist`
+   - Environment Variables: Add `VITE_API_URL=https://your-backend-url.onrender.com`
+
+### Environment Variables
+- Set `PYTHON_VERSION=3.9.13` in your backend service
+- Set `VITE_API_URL` in your frontend service

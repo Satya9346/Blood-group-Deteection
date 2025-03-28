@@ -6,12 +6,20 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import io
 import tensorflow as tf
+from pathlib import Path
 
 # Disable GPU
 tf.config.set_visible_devices([], 'GPU')
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://your-frontend-url.onrender.com",
+            "http://localhost:5173"  # Keep this for local development
+        ]
+    }
+})
 
 # Constants
 IMG_HEIGHT = 64
@@ -296,4 +304,4 @@ def health_check():
 if __name__ == "__main__":
     # If running as script, start Flask server
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    app.run(host='0.0.0.0', port=port) 
