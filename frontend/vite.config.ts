@@ -9,6 +9,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    commands: [
+      'npm install',
+      'npm audit fix',
+      'npm run build'
+    ]
   },
   server: {
     proxy: {
