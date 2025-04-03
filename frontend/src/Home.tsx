@@ -26,14 +26,15 @@ const handleDetection = async () => {
     console.error('Error during prediction:', error);
     if (error.response) {
       console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-      console.error('Response headers:', error.response.headers);
+      const errorMessage = error.response.data.details || error.response.data.error || 'An unknown error occurred';
+      alert(`Prediction failed: ${errorMessage}`);
     } else if (error.request) {
       console.error('No response received:', error.request);
+      alert('No response received from server. Please try again.');
     } else {
       console.error('Error:', error.message);
+      alert(`Error: ${error.message}`);
     }
-    alert('An error occurred during prediction. Please try again.');
   } finally {
     setIsLoading(false);
   }

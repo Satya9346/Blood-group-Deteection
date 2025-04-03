@@ -1,4 +1,5 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TensorFlow warnings
 import numpy as np
 from PIL import Image
 import json
@@ -38,6 +39,11 @@ IMG_WIDTH = 64
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model', 'blood_group_mode.h5')
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
+
+# Add this after MODEL_PATH definition
+if not os.path.exists(MODEL_PATH):
+    print(f"WARNING: Model file not found at {MODEL_PATH}")
+    print(f"Current directory contents: {os.listdir(os.path.dirname(MODEL_PATH))}")
 
 class BloodGroupPredictor:
     def __init__(self, model_path=MODEL_PATH):
@@ -234,61 +240,97 @@ def predict():
     """Handle image prediction request"""
     try:
         print("=== Starting new prediction request ===")
+        print(f"Request Content-Type: {request.content_type}")
+        print(f"Request Files: {request.files}")
+        print(f"Request Headers: {dict(request.headers)}")
+
         if 'image' not in request.files:
             print("No image file in request")
-            print("Request files:", request.files)
-            return jsonify({"error": "No image file provided"}), 400
+            return jsonify({"error": "No image file provided", "details": "Request must include an 'image' file"}), 400
         
         file = request.files['image']
         if file.filename == '':
             print("Empty filename")
-            return jsonify({"error": "No selected file"}), 400
+            return jsonify({"error": "No selected file", "details": "Filename is empty"}), 400
             
         # Print file information
         print(f"Received file: {file.filename}")
         print(f"File content type: {file.content_type}")
-        print(f"File headers: {dict(file.headers)}")
-            
-        # Verify file is a BMP
-        if not file.filename.lower().endswith('.bmp'):
+        
+        # Remove BMP restriction - accept common image formats
+        allowed_extensions = {'.bmp', '.jpg', '.jpeg', '.png'}
+        if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
             print(f"Invalid file type: {file.filename}")
-            return jsonify({"error": "Only BMP files are supported"}), 400
+            return jsonify({
+                "error": "Invalid file type", 
+                "details": f"File must be one of: {', '.join(allowed_extensions)}"
+            }), 400
             
         # Read the image file
         image_data = file.read()
         print(f"Read {len(image_data)} bytes of image data")
         
-        # Try to open the image to verify it's valid
+        # Try to open and preprocess the image
         try:
             test_img = Image.open(io.BytesIO(image_data))
-            print(f"Successfully opened image: format={test_img.format}, size={test_img.size}, mode={test_img.mode}")
+            print(f"Image details: format={test_img.format}, size={test_img.size}, mode={test_img.mode}")
+            
+            # Convert to RGB if needed
+            if test_img.mode != 'RGB':
+                test_img = test_img.convert('RGB')
+                print("Converted image to RGB mode")
+            
+            # Resize image if needed
+            if test_img.size != (IMG_HEIGHT, IMG_WIDTH):
+                test_img = test_img.resize((IMG_HEIGHT, IMG_WIDTH))
+                print(f"Resized image to {IMG_HEIGHT}x{IMG_WIDTH}")
+            
         except Exception as img_error:
-            print(f"Failed to open image: {str(img_error)}")
-            return jsonify({"error": f"Invalid image file: {str(img_error)}"}), 400
+            print(f"Image processing error: {str(img_error)}")
+            return jsonify({
+                "error": "Image processing failed",
+                "details": str(img_error)
+            }), 400
         
         # Create predictor and get prediction
-        predictor = BloodGroupPredictor()
-        
-        # Check if model loaded correctly
-        if predictor.model is None:
-            print("Model failed to load")
-            return jsonify({"error": "Model failed to load"}), 500
+        try:
+            predictor = BloodGroupPredictor()
+            if predictor.model is None:
+                print("Model failed to load")
+                return jsonify({
+                    "error": "Model initialization failed",
+                    "details": "Could not load the model"
+                }), 500
+                
+            result = predictor.predict_blood_group(image_data=image_data)
+            print(f"Prediction result: {result}")
             
-        result = predictor.predict_blood_group(image_data=image_data)
-        print(f"Prediction result: {result}")
-        
-        if "error" in result:
-            print(f"Error in prediction: {result['error']}")
-            return jsonify(result), 500
+            if "error" in result:
+                print(f"Prediction error: {result['error']}")
+                return jsonify({
+                    "error": "Prediction failed",
+                    "details": result['error']
+                }), 500
+                
+            print("=== Prediction completed successfully ===")
+            return jsonify(result)
             
-        print("=== Prediction completed successfully ===")
-        return jsonify(result)
+        except Exception as pred_error:
+            print(f"Prediction processing error: {str(pred_error)}")
+            return jsonify({
+                "error": "Prediction processing failed",
+                "details": str(pred_error)
+            }), 500
+            
     except Exception as e:
         import traceback
-        print(f"Prediction error: {str(e)}")
+        print(f"Unexpected error: {str(e)}")
         print("Full traceback:")
         print(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": "Server error",
+            "details": str(e)
+        }), 500
 
 @app.route('/test-dataset', methods=['POST'])
 def test_dataset_endpoint():
