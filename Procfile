@@ -1,1 +1,1 @@
-web: cd backend && gunicorn --config ../gunicorn.conf.py blood_grp:app 
+web: cd backend && gunicorn --config ../gunicorn.conf.py app:application --bind "0.0.0.0:${PORT}" --log-level debug 

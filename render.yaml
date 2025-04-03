@@ -5,9 +5,15 @@ services:
     buildCommand: |
       python -m pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: cd backend && gunicorn blood_grp:app --bind 0.0.0.0:$PORT
+    startCommand: cd backend && gunicorn --config ../gunicorn.conf.py app:application --bind "0.0.0.0:${PORT}" --log-level debug
     env:
       - key: PYTHON_VERSION
         value: 3.9.16
       - key: PORT
-        value: 10000 
+        value: 10000
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_APP
+        value: app.py
+      - key: PYTHONPATH
+        value: /opt/render/project/src/backend 

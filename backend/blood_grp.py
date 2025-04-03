@@ -7,6 +7,7 @@ from flask_cors import CORS
 import io
 import tensorflow as tf
 from pathlib import Path
+import sys
 
 # Disable GPU
 tf.config.set_visible_devices([], 'GPU')
@@ -15,7 +16,11 @@ app = Flask(__name__)
 
 # Get port from environment variable
 port = int(os.environ.get("PORT", 10000))
-print(f"Configured to use port: {port}")
+print(f"=== Environment Configuration ===")
+print(f"PORT env var: {os.environ.get('PORT')}")
+print(f"Configured port: {port}")
+print(f"Current working directory: {os.getcwd()}")
+print(f"Python path: {sys.path}")
 
 # Update CORS configuration
 CORS(app, resources={
