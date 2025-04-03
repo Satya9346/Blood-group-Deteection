@@ -18,7 +18,8 @@ CORS(app, resources={
             "http://localhost:5173",  # Frontend development server
             "http://localhost:5174",  # Alternate frontend port
             "http://localhost:5000",   # Backend server
-            "https://*.onrender.com"  # Add this to allow Render domains
+            "https://blood-group-deteection.onrender.com",
+            "https://blood-group-deteection-backend.onrender.com"
         ]
     }
 })
