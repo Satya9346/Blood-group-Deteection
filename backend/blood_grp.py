@@ -12,12 +12,14 @@ from pathlib import Path
 tf.config.set_visible_devices([], 'GPU')
 
 app = Flask(__name__)
+
+# Get port from environment variable
+port = int(os.environ.get("PORT", 10000))
+
+# Update CORS configuration
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "http://localhost:5173",  # Frontend development server
-            "http://localhost:5174",  # Alternate frontend port
-            "http://localhost:5000",   # Backend server
             "https://blood-group-deteection.onrender.com",
             "https://blood-group-deteection-backend.onrender.com"
         ]
@@ -301,9 +303,11 @@ def test_dataset_endpoint():
 
 @app.route('/')
 def health_check():
-    return jsonify({"status": "healthy", "message": "Blood Group Detection API is running"}), 200
+    return jsonify({
+        "status": "healthy", 
+        "message": "Blood Group Detection API is running",
+        "port": port
+    }), 200
 
 if __name__ == "__main__":
-    # If running as script, start Flask server
-    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port) 

@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT blood_grp:app 
+web: gunicorn --chdir backend blood_grp:app --bind 0.0.0.0:$PORT 
