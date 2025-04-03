@@ -15,8 +15,9 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "https://your-frontend-url.onrender.com",
-            "http://localhost:5173"  # Keep this for local development
+            "http://localhost:5173",  # Frontend development server
+            "http://localhost:5174",  # Alternate frontend port
+            "http://localhost:5000"   # Backend server
         ]
     }
 })
