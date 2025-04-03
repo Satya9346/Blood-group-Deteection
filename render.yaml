@@ -1,9 +1,11 @@
 services:
   - type: web
     name: blood-group-predictor
-    env: python
+    env:
+      - key: PYTHON_VERSION
+        value: 3.9.3
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.blood_grp:app
+    startCommand: python your_app.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.13 
