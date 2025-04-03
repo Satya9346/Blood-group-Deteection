@@ -15,6 +15,7 @@ app = Flask(__name__)
 
 # Get port from environment variable
 port = int(os.environ.get("PORT", 10000))
+print(f"Configured to use port: {port}")
 
 # Update CORS configuration
 CORS(app, resources={
@@ -303,10 +304,17 @@ def test_dataset_endpoint():
 
 @app.route('/')
 def health_check():
+    current_port = int(os.environ.get("PORT", 10000))
     return jsonify({
-        "status": "healthy", 
+        "status": "healthy",
         "message": "Blood Group Detection API is running",
-        "port": port
+        "port": current_port,
+        "environment": {
+            "PYTHON_VERSION": os.environ.get("PYTHON_VERSION"),
+            "PORT": os.environ.get("PORT"),
+            "PWD": os.getcwd(),
+            "PATH": os.environ.get("PATH")
+        }
     }), 200
 
 if __name__ == "__main__":

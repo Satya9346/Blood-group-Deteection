@@ -1,1 +1,1 @@
-web: gunicorn --chdir backend blood_grp:app --bind 0.0.0.0:$PORT 
+web: cd backend && gunicorn --config ../gunicorn.conf.py blood_grp:app 
