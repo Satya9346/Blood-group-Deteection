@@ -2,8 +2,10 @@ services:
   - type: web
     runtime: python
     pythonVersion: 3.9.16
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn blood_grp:app --bind 0.0.0.0:$PORT --chdir backend
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT blood_grp:app
     env:
       - key: PYTHON_VERSION
         value: 3.9.16
