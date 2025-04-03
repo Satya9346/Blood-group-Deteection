@@ -17,7 +17,8 @@ CORS(app, resources={
         "origins": [
             "http://localhost:5173",  # Frontend development server
             "http://localhost:5174",  # Alternate frontend port
-            "http://localhost:5000"   # Backend server
+            "http://localhost:5000",   # Backend server
+            "https://*.onrender.com"  # Add this to allow Render domains
         ]
     }
 })
@@ -297,12 +298,11 @@ def test_dataset_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/health', methods=['GET'])
+@app.route('/')
 def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy"})
+    return jsonify({"status": "healthy", "message": "Blood Group Detection API is running"}), 200
 
 if __name__ == "__main__":
     # If running as script, start Flask server
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port) 
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port) 
