@@ -42,14 +42,14 @@ CORS(app, resources={
 # Constants
 IMG_HEIGHT = 64
 IMG_WIDTH = 64
-MODEL_PATH = 'backend/model/blood_group_mode.h5'
+MODEL_PATH = 'model/blood_group_mode.h5'
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
 
 # Add this after MODEL_PATH definition
 if not os.path.exists(MODEL_PATH):
     print(f"WARNING: Model file not found at {MODEL_PATH}")
-    print(f"Current directory contents: {os.listdir(os.path.dirname(MODEL_PATH))}")
+    print(f"Current directory contents: {os.listdir('.')}")
 
 # Add debug logging
 import logging
