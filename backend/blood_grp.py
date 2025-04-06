@@ -33,18 +33,21 @@ CORS(app, resources={
             "http://localhost:5174",  # Alternative Vite port
             "http://localhost:3000",   # Just in case
             "https://blood-group-deteection.onrender.com",
-            "https://blood-group-detection-frontend.onrender.com"  # Frontend Render URL
+            "https://blood-group-detection-frontend.onrender.com",  # Frontend Render URL
+            "https://blood-group-detection.onrender.com"  # Alternative frontend URL
         ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"],
-        "supports_credentials": True
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 600
     }
 })
 
 # Constants
 IMG_HEIGHT = 64
 IMG_WIDTH = 64
-MODEL_PATH = 'model/blood_group_mode.h5'
+MODEL_PATH = 'model/blood_group_model_v3.h5'
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
 
@@ -426,7 +429,10 @@ def upload_file():
         # Check if the post request has the file part
         if 'file' not in request.files:
             logger.error("No file part in the request")
-            return jsonify({"error": "No file part in the request"}), 400
+            return jsonify({
+                "error": "No file part in the request",
+                "message": "Please ensure you are sending a file with the key 'file'"
+            }), 400
         
         file = request.files['file']
         
@@ -434,7 +440,10 @@ def upload_file():
         # submit an empty part without filename
         if file.filename == '':
             logger.error("No file selected")
-            return jsonify({"error": "No file selected"}), 400
+            return jsonify({
+                "error": "No file selected",
+                "message": "Please select a file to upload"
+            }), 400
         
         # Validate file type
         is_valid, error_message = is_valid_bmp(file)
@@ -467,7 +476,11 @@ def upload_file():
                         logger.info(f"Cleaned up temporary file: {file_path}")
                     except:
                         pass
-                return jsonify({"error": f"Model initialization error: {str(model_error)}"}), 500
+                return jsonify({
+                    "error": "Model initialization error",
+                    "message": str(model_error),
+                    "details": "Failed to load the blood group prediction model"
+                }), 500
             
             # Get prediction
             try:
@@ -482,7 +495,11 @@ def upload_file():
                         logger.info(f"Cleaned up temporary file: {file_path}")
                     except:
                         pass
-                return jsonify({"error": f"Prediction error: {str(pred_error)}"}), 500
+                return jsonify({
+                    "error": "Prediction error",
+                    "message": str(pred_error),
+                    "details": "Failed to process the image and make a prediction"
+                }), 500
             
             # Delete the input file after processing
             try:
@@ -493,7 +510,11 @@ def upload_file():
             
             if "error" in result:
                 logger.error(f"Error in prediction result: {result['error']}")
-                return jsonify(result), 500
+                return jsonify({
+                    "error": "Prediction failed",
+                    "message": result['error'],
+                    "details": "The model returned an error during prediction"
+                }), 500
             
             return jsonify(result), 200
             
@@ -507,12 +528,20 @@ def upload_file():
                     logger.info(f"Cleaned up temporary file: {file_path}")
                 except:
                     pass
-            return jsonify({"error": str(e)}), 500
+            return jsonify({
+                "error": "File processing error",
+                "message": str(e),
+                "details": "Failed to process the uploaded file"
+            }), 500
             
     except Exception as e:
         logger.error(f"Unexpected error in upload_file: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e),
+            "details": "An unexpected error occurred while processing your request"
+        }), 500
 
 @app.route('/')
 def health_check():
@@ -530,4 +559,4 @@ def health_check():
     }), 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True) 
+    app.run(host="0.0.0.0", port=port, debug=True) 
