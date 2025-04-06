@@ -106,7 +106,16 @@ function Home() {
       setResult(response.data);
     } catch (error: any) {
       console.error('Error during prediction:', error);
-      setError(error.response?.data?.message || 'An error occurred during prediction. Please try again.');
+      // Display the actual error message from the backend
+      if (error.response?.data?.error) {
+        setError(`Error: ${error.response.data.error}`);
+      } else if (error.response?.data?.message) {
+        setError(`Error: ${error.response.data.message}`);
+      } else if (error.message) {
+        setError(`Error: ${error.message}`);
+      } else {
+        setError('An error occurred during prediction. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

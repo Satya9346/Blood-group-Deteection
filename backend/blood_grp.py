@@ -10,6 +10,7 @@ import tensorflow as tf
 from pathlib import Path
 import sys
 import traceback
+from werkzeug.utils import secure_filename
 
 # Disable GPU
 tf.config.set_visible_devices([], 'GPU')
@@ -417,6 +418,100 @@ def test_dataset_endpoint():
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    try:
+        # Check if the post request has the file part
+        if 'file' not in request.files:
+            logger.error("No file part in the request")
+            return jsonify({"error": "No file part in the request"}), 400
+        
+        file = request.files['file']
+        
+        # If user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            logger.error("No file selected")
+            return jsonify({"error": "No file selected"}), 400
+        
+        # Validate file type
+        is_valid, error_message = is_valid_bmp(file)
+        if not is_valid:
+            logger.error(f"Invalid file type: {error_message}")
+            return jsonify({
+                "error": "Invalid file type",
+                "message": error_message,
+                "allowed_extensions": list(ALLOWED_EXTENSIONS)
+            }), 415  # 415 Unsupported Media Type
+        
+        try:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Save the file temporarily
+            file.save(file_path)
+            logger.info(f"File saved temporarily at: {file_path}")
+            
+            # Initialize the predictor
+            try:
+                predictor = BloodGroupPredictor()
+            except Exception as model_error:
+                logger.error(f"Error initializing predictor: {str(model_error)}")
+                logger.error(traceback.format_exc())
+                # Clean up file in case of error
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        logger.info(f"Cleaned up temporary file: {file_path}")
+                    except:
+                        pass
+                return jsonify({"error": f"Model initialization error: {str(model_error)}"}), 500
+            
+            # Get prediction
+            try:
+                result = predictor.predict_blood_group(image_path=file_path)
+            except Exception as pred_error:
+                logger.error(f"Error during prediction: {str(pred_error)}")
+                logger.error(traceback.format_exc())
+                # Clean up file in case of error
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        logger.info(f"Cleaned up temporary file: {file_path}")
+                    except:
+                        pass
+                return jsonify({"error": f"Prediction error: {str(pred_error)}"}), 500
+            
+            # Delete the input file after processing
+            try:
+                os.remove(file_path)
+                logger.info(f"Temporary file deleted: {file_path}")
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path}: {str(e)}")
+            
+            if "error" in result:
+                logger.error(f"Error in prediction result: {result['error']}")
+                return jsonify(result), 500
+            
+            return jsonify(result), 200
+            
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            logger.error(traceback.format_exc())
+            # Clean up file in case of error
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Cleaned up temporary file: {file_path}")
+                except:
+                    pass
+            return jsonify({"error": str(e)}), 500
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_file: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/')
 def health_check():
