@@ -356,7 +356,7 @@ def predict():
             logger.debug(f"Image array shape: {img_array.shape}")
             
             # Load model
-            model_path = os.path.join(os.path.dirname(__file__), 'model', 'blood_group_mode.h5')
+            model_path = MODEL_PATH
             logger.debug(f"Loading model from: {model_path}")
             
             if not os.path.exists(model_path):

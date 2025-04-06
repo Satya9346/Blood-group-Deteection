@@ -94,7 +94,10 @@ function Home() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post('http://localhost:10000/upload', formData, {
+      // Use environment variable for API URL or fallback to Render URL
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://blood-group-deteection.onrender.com';
+      
+      const response = await axios.post(`${apiUrl}/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
