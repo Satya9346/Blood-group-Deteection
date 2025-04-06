@@ -22,41 +22,10 @@ UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'bmp'}
 ALLOWED_MIMETYPES = {'image/bmp', 'image/x-bmp', 'image/x-ms-bmp'}
 
-# Get the absolute path to the model directory
-# For Render deployment, the model should be in the root directory
-if os.environ.get('RENDER'):
-    # Render deployment path
-    BASE_DIR = '/opt/render/project/src'
-    MODEL_DIR = os.path.join(BASE_DIR, 'model')
-else:
-    # Local development path
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    MODEL_DIR = os.path.join(BASE_DIR, 'model')
+# Set the model path directly from GitHub
+MODEL_PATH = 'backend/model/blood_group_mode.h5'
 
-# Try different model filenames in order of preference
-MODEL_FILENAMES = [
-    'blood_group_mode.h5',  # Primary model file
-    'blood_group_model_v3.h5',
-    'blood_group_model_v2.h5'
-]
-
-# Find the first existing model file
-MODEL_PATH = None
-for model_filename in MODEL_FILENAMES:
-    potential_path = os.path.join(MODEL_DIR, model_filename)
-    if os.path.exists(potential_path):
-        MODEL_PATH = potential_path
-        break
-
-if MODEL_PATH is None:
-    logger.error("No model file found in any of the expected locations!")
-    logger.error(f"Checked paths: {[os.path.join(MODEL_DIR, f) for f in MODEL_FILENAMES]}")
-else:
-    logger.info(f"Using model file: {MODEL_PATH}")
-
-logger.info(f"Base directory: {BASE_DIR}")
-logger.info(f"Model directory: {MODEL_DIR}")
-logger.info(f"Model exists: {MODEL_PATH is not None}")
+logger.info(f"Using model file: {MODEL_PATH}")
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
