@@ -47,7 +47,7 @@ CORS(app, resources={
 # Constants
 IMG_HEIGHT = 64
 IMG_WIDTH = 64
-MODEL_PATH = 'model/blood_group_model_v3.h5'
+MODEL_PATH = 'model/blood_group_model_v3.h5'  # Fixed model path
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
 
