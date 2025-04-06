@@ -6,8 +6,28 @@ function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<{ blood_group: string; confidence: string } | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateFile = (file: File): boolean => {
+    // Check file extension
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension !== 'bmp') {
+      setError(`Invalid file type. Only .bmp files are allowed. Received: .${extension}`);
+      return false;
+    }
+
+    // Check MIME type
+    const validMimeTypes = ['image/bmp', 'image/x-bmp', 'image/x-ms-bmp'];
+    if (!validMimeTypes.includes(file.type.toLowerCase())) {
+      setError(`Invalid file format. Only .bmp files are allowed.`);
+      return false;
+    }
+
+    setError(null);
+    return true;
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -26,13 +46,29 @@ function Home() {
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      const droppedFile = e.dataTransfer.files[0];
+      if (validateFile(droppedFile)) {
+        setFile(droppedFile);
+      } else {
+        // Clear the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (validateFile(selectedFile)) {
+        setFile(selectedFile);
+      } else {
+        // Reset the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
     }
   };
 
@@ -42,27 +78,32 @@ function Home() {
 
   const handleDetection = async () => {
     if (!file) {
-      alert('Please upload a fingerprint image first');
+      setError('Please upload a fingerprint image first');
+      return;
+    }
+
+    if (!validateFile(file)) {
       return;
     }
 
     setIsLoading(true);
     setResult(null);
+    setError(null);
 
     try {
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('file', file);
 
-      const response = await axios.post('http://localhost:5000/predict', formData, {
+      const response = await axios.post('http://localhost:10000/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
 
       setResult(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error during prediction:', error);
-      alert('An error occurred during prediction. Please try again.');
+      setError(error.response?.data?.message || 'An error occurred during prediction. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +134,7 @@ function Home() {
             type="file" 
             ref={fileInputRef}
             className="hidden" 
-            accept="image/*"
+            accept=".bmp,image/bmp,image/x-bmp,image/x-ms-bmp"
             onChange={handleFileChange}
           />
           
@@ -124,15 +165,22 @@ function Home() {
               >
                 Browse Files
               </button>
+              <p className="text-sm text-gray-500 mt-2">Only .bmp files are accepted</p>
             </>
           )}
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-600">{error}</p>
+        </div>
+      )}
+
       <div className="text-center">
         <button
           onClick={handleDetection}
-          disabled={isLoading || !file}
+          disabled={isLoading || !file || !!error}
           className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-8 py-3 rounded-lg text-lg transition-colors disabled:opacity-50"
         >
           {isLoading ? (

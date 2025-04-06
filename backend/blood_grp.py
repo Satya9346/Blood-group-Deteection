@@ -9,6 +9,7 @@ import io
 import tensorflow as tf
 from pathlib import Path
 import sys
+import traceback
 
 # Disable GPU
 tf.config.set_visible_devices([], 'GPU')
@@ -27,9 +28,14 @@ print(f"Python path: {sys.path}")
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "https://blood-group-deteection.onrender.com",
-            "https://blood-group-deteection-backend.onrender.com"
-        ]
+            "http://localhost:5173",  # Vite default port
+            "http://localhost:5174",  # Alternative Vite port
+            "http://localhost:3000",   # Just in case
+            "https://blood-group-deteection.onrender.com"
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True
     }
 })
 
@@ -45,6 +51,11 @@ if not os.path.exists(MODEL_PATH):
     print(f"WARNING: Model file not found at {MODEL_PATH}")
     print(f"Current directory contents: {os.listdir(os.path.dirname(MODEL_PATH))}")
 
+# Add debug logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 class BloodGroupPredictor:
     def __init__(self, model_path=MODEL_PATH):
         """Initialize the predictor with model path"""
@@ -59,23 +70,50 @@ class BloodGroupPredictor:
             try:
                 # First attempt: normal loading
                 self.model = tf.keras.models.load_model(model_path, compile=False)
+                self.model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
             except ValueError as e:
                 print(f"First load attempt failed: {str(e)}")
                 print("Attempting to reconstruct model from scratch...")
                 
                 # Recreate the exact model architecture from training
                 self.model = tf.keras.models.Sequential([
+                    # Input layer
                     tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
+                    tf.keras.layers.BatchNormalization(),
                     tf.keras.layers.MaxPooling2D(2, 2),
+                    
+                    # First block
                     tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
+                    tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
                     tf.keras.layers.MaxPooling2D(2, 2),
+                    tf.keras.layers.Dropout(0.25),
+                    
+                    # Second block
                     tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
+                    tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
                     tf.keras.layers.MaxPooling2D(2, 2),
+                    tf.keras.layers.Dropout(0.25),
+                    
+                    # Third block
                     tf.keras.layers.Conv2D(256, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
+                    tf.keras.layers.Conv2D(256, (3, 3), activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
                     tf.keras.layers.MaxPooling2D(2, 2),
+                    tf.keras.layers.Dropout(0.25),
+                    
+                    # Dense layers
                     tf.keras.layers.Flatten(),
                     tf.keras.layers.Dense(512, activation='relu'),
-                    tf.keras.layers.Dropout(0.55),
+                    tf.keras.layers.BatchNormalization(),
+                    tf.keras.layers.Dropout(0.5),
+                    tf.keras.layers.Dense(256, activation='relu'),
+                    tf.keras.layers.BatchNormalization(),
+                    tf.keras.layers.Dropout(0.5),
                     tf.keras.layers.Dense(8, activation='softmax')  # 8 classes for blood groups
                 ])
                 
@@ -86,7 +124,7 @@ class BloodGroupPredictor:
             # Compile model with same configuration as training
             print("Compiling model...")
             self.model.compile(
-                optimizer='adam',
+                optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
                 loss='categorical_crossentropy',
                 metrics=['accuracy']
             )
@@ -116,13 +154,30 @@ class BloodGroupPredictor:
                 print(f"Converting image from {img.mode} to RGB")
                 img = img.convert('RGB')
             
+            # Apply basic image enhancement
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.2)  # Increase contrast slightly
+            
             # Resize to match training dimensions
             print(f"Resizing image to ({IMG_HEIGHT}, {IMG_WIDTH})")
             img = img.resize((IMG_HEIGHT, IMG_WIDTH), Image.Resampling.LANCZOS)
             
-            # Convert to array and normalize exactly like in training
+            # Convert to array and normalize
             img_array = np.array(img)
-            img_array = img_array.astype('float32') / 255.0  # Same normalization as training
+            
+            # Apply additional preprocessing
+            img_array = img_array.astype('float32')
+            
+            # Normalize to [0,1]
+            img_array = img_array / 255.0
+            
+            # Apply standardization
+            mean = np.mean(img_array)
+            std = np.std(img_array)
+            img_array = (img_array - mean) / (std + 1e-7)
+            
+            # Add batch dimension
             img_array = np.expand_dims(img_array, axis=0)
             
             print(f"Preprocessed image shape: {img_array.shape}")
@@ -137,29 +192,50 @@ class BloodGroupPredictor:
         """Predict blood group from image path or image data"""
         try:
             if image_path:
-                print(f"Loading image from path: {image_path}")  # Added debug print
+                print(f"Loading image from path: {image_path}")
                 if not os.path.exists(image_path):
                     return {"error": "Image file not found"}
                 img = Image.open(image_path)
             elif image_data:
-                print("Loading image from uploaded data")  # Added debug print
+                print("Loading image from uploaded data")
                 img = Image.open(io.BytesIO(image_data))
             else:
                 return {"error": "No image provided"}
 
             # Preprocess image
-            print("Preprocessing image...")  # Added debug print
+            print("Preprocessing image...")
             img_array = self.preprocess_image(img)
             
             if self.model is None:
-                print("ERROR: Model not loaded properly")  # Added debug print
+                print("ERROR: Model not loaded properly")
                 return {"error": "Model not loaded properly"}
             
             # Make prediction using the model
-            print("Making prediction...")  # Added debug print
+            print("Making prediction...")
             predictions = self.model.predict(img_array)
-            predicted_class_index = np.argmax(predictions[0])
-            confidence = float(predictions[0][predicted_class_index] * 100)
+            
+            # Get top 2 predictions
+            top_2_indices = np.argsort(predictions[0])[-2:][::-1]
+            top_2_confidences = predictions[0][top_2_indices] * 100
+            
+            predicted_class_index = top_2_indices[0]
+            confidence = float(top_2_confidences[0])
+            second_confidence = float(top_2_confidences[1])
+            
+            # If confidence is too low or top 2 predictions are too close, return uncertain
+            CONFIDENCE_THRESHOLD = 60.0  # 60% confidence threshold
+            CONFIDENCE_DIFF_THRESHOLD = 20.0  # 20% difference threshold
+            
+            if confidence < CONFIDENCE_THRESHOLD or (confidence - second_confidence) < CONFIDENCE_DIFF_THRESHOLD:
+                return {
+                    'blood_group': 'Uncertain',
+                    'confidence': f"{confidence:.2f}%",
+                    'second_prediction': {
+                        'blood_group': self.classes[top_2_indices[1]],
+                        'confidence': f"{second_confidence:.2f}%"
+                    },
+                    'predictions': predictions[0].tolist()
+                }
             
             print(f"Raw predictions: {predictions[0]}")
             print(f"Predicted class index: {predicted_class_index}")
@@ -169,6 +245,10 @@ class BloodGroupPredictor:
             return {
                 'blood_group': self.classes[predicted_class_index],
                 'confidence': f"{confidence:.2f}%",
+                'second_prediction': {
+                    'blood_group': self.classes[top_2_indices[1]],
+                    'confidence': f"{second_confidence:.2f}%"
+                },
                 'predictions': predictions[0].tolist()
             }
 
@@ -237,96 +317,85 @@ def test_dataset(dataset_path):
 # Web Routes
 @app.route('/predict', methods=['POST'])
 def predict():
-    """Handle image prediction request"""
     try:
-        print("=== Starting new prediction request ===")
-        print(f"Request Content-Type: {request.content_type}")
-        print(f"Request Files: {request.files}")
-        print(f"Request Headers: {dict(request.headers)}")
-
+        logger.debug("=== Starting prediction request ===")
+        logger.debug(f"Request headers: {dict(request.headers)}")
+        
+        # Check if file exists in request
         if 'image' not in request.files:
-            print("No image file in request")
-            return jsonify({"error": "No image file provided", "details": "Request must include an 'image' file"}), 400
+            logger.error("No image file in request")
+            return jsonify({"error": "No image file provided"}), 400
         
         file = request.files['image']
+        logger.debug(f"Received file: {file.filename}")
+        
+        # Check if file is empty
         if file.filename == '':
-            print("Empty filename")
-            return jsonify({"error": "No selected file", "details": "Filename is empty"}), 400
-            
-        # Print file information
-        print(f"Received file: {file.filename}")
-        print(f"File content type: {file.content_type}")
+            logger.error("Empty filename received")
+            return jsonify({"error": "No selected file"}), 400
         
-        # Remove BMP restriction - accept common image formats
-        allowed_extensions = {'.bmp', '.jpg', '.jpeg', '.png'}
-        if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
-            print(f"Invalid file type: {file.filename}")
-            return jsonify({
-                "error": "Invalid file type", 
-                "details": f"File must be one of: {', '.join(allowed_extensions)}"
-            }), 400
-            
-        # Read the image file
-        image_data = file.read()
-        print(f"Read {len(image_data)} bytes of image data")
-        
-        # Try to open and preprocess the image
         try:
-            test_img = Image.open(io.BytesIO(image_data))
-            print(f"Image details: format={test_img.format}, size={test_img.size}, mode={test_img.mode}")
+            # Read image file
+            image_bytes = file.read()
+            image = Image.open(io.BytesIO(image_bytes))
+            logger.debug(f"Image opened successfully. Format: {image.format}, Size: {image.size}")
             
             # Convert to RGB if needed
-            if test_img.mode != 'RGB':
-                test_img = test_img.convert('RGB')
-                print("Converted image to RGB mode")
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+                logger.debug("Converted image to RGB")
             
-            # Resize image if needed
-            if test_img.size != (IMG_HEIGHT, IMG_WIDTH):
-                test_img = test_img.resize((IMG_HEIGHT, IMG_WIDTH))
-                print(f"Resized image to {IMG_HEIGHT}x{IMG_WIDTH}")
+            # Resize image to 64x64 as expected by the model
+            image = image.resize((64, 64))
+            logger.debug("Image resized to 64x64")
             
-        except Exception as img_error:
-            print(f"Image processing error: {str(img_error)}")
+            # Convert to numpy array
+            img_array = np.array(image)
+            img_array = img_array / 255.0  # Normalize
+            img_array = np.expand_dims(img_array, axis=0)
+            logger.debug(f"Image array shape: {img_array.shape}")
+            
+            # Load model
+            model_path = os.path.join(os.path.dirname(__file__), 'model', 'blood_group_mode.h5')
+            logger.debug(f"Loading model from: {model_path}")
+            
+            if not os.path.exists(model_path):
+                logger.error(f"Model file not found at {model_path}")
+                return jsonify({"error": f"Model file not found"}), 500
+            
+            model = tf.keras.models.load_model(model_path, compile=False)
+            model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+            logger.debug("Model loaded successfully")
+            
+            # Make prediction
+            prediction = model.predict(img_array)
+            logger.debug(f"Raw prediction: {prediction}")
+            
+            # Process prediction result
+            blood_groups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+            predicted_class = np.argmax(prediction[0])
+            confidence = float(prediction[0][predicted_class])
+            blood_group = blood_groups[predicted_class]
+            
+            logger.debug(f"Predicted blood group: {blood_group}, Confidence: {confidence}")
+            
             return jsonify({
-                "error": "Image processing failed",
-                "details": str(img_error)
-            }), 400
-        
-        # Create predictor and get prediction
-        try:
-            predictor = BloodGroupPredictor()
-            if predictor.model is None:
-                print("Model failed to load")
-                return jsonify({
-                    "error": "Model initialization failed",
-                    "details": "Could not load the model"
-                }), 500
-                
-            result = predictor.predict_blood_group(image_data=image_data)
-            print(f"Prediction result: {result}")
+                "blood_group": blood_group,
+                "confidence": confidence,
+                "success": True
+            })
             
-            if "error" in result:
-                print(f"Prediction error: {result['error']}")
-                return jsonify({
-                    "error": "Prediction failed",
-                    "details": result['error']
-                }), 500
-                
-            print("=== Prediction completed successfully ===")
-            return jsonify(result)
-            
-        except Exception as pred_error:
-            print(f"Prediction processing error: {str(pred_error)}")
+        except Exception as e:
+            logger.error(f"Error processing image: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({
-                "error": "Prediction processing failed",
-                "details": str(pred_error)
+                "error": "Error processing image",
+                "details": str(e)
             }), 500
             
     except Exception as e:
-        import traceback
-        print(f"Unexpected error: {str(e)}")
-        print("Full traceback:")
-        print(traceback.format_exc())
+        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             "error": "Server error",
             "details": str(e)
@@ -365,4 +434,4 @@ def health_check():
     }), 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=port) 
+    app.run(host="0.0.0.0", port=5000, debug=True) 
