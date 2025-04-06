@@ -42,7 +42,7 @@ CORS(app, resources={
 # Constants
 IMG_HEIGHT = 64
 IMG_WIDTH = 64
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model', 'blood_group_mode.h5')
+MODEL_PATH = 'backend/model/blood_group_mode.h5'
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
 
