@@ -5,6 +5,13 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 import io
 import magic  # for MIME type detection
+import tensorflow as tf
+import numpy as np
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 port = int(os.environ.get("PORT", 10000))
@@ -13,6 +20,7 @@ port = int(os.environ.get("PORT", 10000))
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'bmp'}
 ALLOWED_MIMETYPES = {'image/bmp', 'image/x-bmp', 'image/x-ms-bmp'}
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model', 'blood_group_model_v3.h5')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -53,6 +61,103 @@ def is_valid_bmp(file):
     
     return True, None
 
+class BloodGroupPredictor:
+    def __init__(self, model_path=MODEL_PATH):
+        """Initialize the predictor with model path"""
+        logger.info(f"Loading model from: {model_path}")
+        self.classes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+        try:
+            if not os.path.exists(model_path):
+                logger.error(f"Model file not found at: {model_path}")
+                raise FileNotFoundError(f"Model file not found at: {model_path}")
+            
+            logger.info("Model file exists, attempting to load...")
+            self.model = tf.keras.models.load_model(model_path, compile=False)
+            self.model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+            logger.info("Model loaded and compiled successfully")
+            
+        except Exception as e:
+            logger.error(f"Error loading model: {str(e)}")
+            self.model = None
+            raise
+
+    def preprocess_image(self, img):
+        """Preprocess the input image for prediction"""
+        try:
+            logger.info(f"Original image mode: {img.mode}")
+            logger.info(f"Original image size: {img.size}")
+            
+            # Convert to RGB if needed
+            if img.mode != 'RGB':
+                logger.info(f"Converting image from {img.mode} to RGB")
+                img = img.convert('RGB')
+            
+            # Resize to match training dimensions
+            logger.info(f"Resizing image to (64, 64)")
+            img = img.resize((64, 64), Image.Resampling.LANCZOS)
+            
+            # Convert to array and normalize
+            img_array = np.array(img)
+            img_array = img_array.astype('float32') / 255.0
+            img_array = np.expand_dims(img_array, axis=0)
+            
+            logger.info(f"Preprocessed image shape: {img_array.shape}")
+            return img_array
+            
+        except Exception as e:
+            logger.error(f"Error preprocessing image: {str(e)}")
+            raise
+
+    def predict_blood_group(self, image_path=None, image_data=None):
+        """Predict blood group from image path or image data"""
+        try:
+            if self.model is None:
+                logger.error("Model not loaded")
+                return {"error": "Model not loaded properly"}
+            
+            if image_path:
+                logger.info(f"Loading image from path: {image_path}")
+                if not os.path.exists(image_path):
+                    return {"error": "Image file not found"}
+                img = Image.open(image_path)
+            elif image_data:
+                logger.info("Loading image from uploaded data")
+                img = Image.open(io.BytesIO(image_data))
+            else:
+                return {"error": "No image provided"}
+
+            # Preprocess image
+            logger.info("Preprocessing image...")
+            img_array = self.preprocess_image(img)
+            
+            # Make prediction
+            logger.info("Making prediction...")
+            predictions = self.model.predict(img_array, verbose=0)
+            
+            # Get top 2 predictions
+            top_2_indices = np.argsort(predictions[0])[-2:][::-1]
+            top_2_confidences = predictions[0][top_2_indices] * 100
+            
+            predicted_class_index = top_2_indices[0]
+            confidence = float(top_2_confidences[0])
+            second_confidence = float(top_2_confidences[1])
+            
+            logger.info(f"Predicted blood group: {self.classes[predicted_class_index]}")
+            logger.info(f"Confidence: {confidence:.2f}%")
+            
+            return {
+                'blood_group': self.classes[predicted_class_index],
+                'confidence': f"{confidence:.2f}%",
+                'second_prediction': {
+                    'blood_group': self.classes[top_2_indices[1]],
+                    'confidence': f"{second_confidence:.2f}%"
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error during prediction: {str(e)}")
+            return {"error": str(e)}
+
 # Add a basic route for health checks
 @app.route('/')
 def health_check():
@@ -60,57 +165,67 @@ def health_check():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Check if the post request has the file part
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part in the request"}), 400
-    
-    file = request.files['file']
-    
-    # If user does not select file, browser also
-    # submit an empty part without filename
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-    
-    # Validate file type
-    is_valid, error_message = is_valid_bmp(file)
-    if not is_valid:
-        return jsonify({
-            "error": "Invalid file type",
-            "message": error_message,
-            "allowed_extensions": list(ALLOWED_EXTENSIONS)
-        }), 415  # 415 Unsupported Media Type
-    
     try:
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        # Check if the post request has the file part
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part in the request"}), 400
         
-        # Save the file temporarily
-        file.save(file_path)
+        file = request.files['file']
         
-        # Initialize the predictor
-        predictor = BloodGroupPredictor()
+        # If user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
         
-        # Get prediction
-        result = predictor.predict_blood_group(image_path=file_path)
+        # Validate file type
+        is_valid, error_message = is_valid_bmp(file)
+        if not is_valid:
+            return jsonify({
+                "error": "Invalid file type",
+                "message": error_message,
+                "allowed_extensions": list(ALLOWED_EXTENSIONS)
+            }), 415  # 415 Unsupported Media Type
         
-        # Delete the input file after processing
         try:
-            os.remove(file_path)
-        except Exception as e:
-            print(f"Error deleting file {file_path}: {str(e)}")
-        
-        return jsonify(result), 200
-        
-    except Exception as e:
-        # Clean up file in case of error
-        if os.path.exists(file_path):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Save the file temporarily
+            file.save(file_path)
+            logger.info(f"File saved temporarily at: {file_path}")
+            
+            # Initialize the predictor
+            predictor = BloodGroupPredictor()
+            
+            # Get prediction
+            result = predictor.predict_blood_group(image_path=file_path)
+            
+            # Delete the input file after processing
             try:
                 os.remove(file_path)
-            except:
-                pass
-        return jsonify({"error": str(e)}), 500
-
-# ... rest of your code ...
+                logger.info(f"Temporary file deleted: {file_path}")
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path}: {str(e)}")
+            
+            if "error" in result:
+                return jsonify(result), 500
+            
+            return jsonify(result), 200
+            
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            # Clean up file in case of error
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Cleaned up temporary file: {file_path}")
+                except:
+                    pass
+            return jsonify({"error": str(e)}), 500
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_file: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port) 
