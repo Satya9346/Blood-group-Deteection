@@ -32,7 +32,8 @@ CORS(app, resources={
             "http://localhost:5173",  # Vite default port
             "http://localhost:5174",  # Alternative Vite port
             "http://localhost:3000",   # Just in case
-            "https://blood-group-deteection.onrender.com"
+            "https://blood-group-deteection.onrender.com",
+            "https://blood-group-detection-frontend.onrender.com"  # Frontend Render URL
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"],
