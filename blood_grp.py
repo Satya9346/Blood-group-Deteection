@@ -8,6 +8,7 @@ import magic  # for MIME type detection
 import tensorflow as tf
 import numpy as np
 import logging
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,16 @@ port = int(os.environ.get("PORT", 10000))
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'bmp'}
 ALLOWED_MIMETYPES = {'image/bmp', 'image/x-bmp', 'image/x-ms-bmp'}
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model', 'blood_group_model_v3.h5')
+
+# Get the absolute path to the model directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, 'model')
+MODEL_PATH = os.path.join(MODEL_DIR, 'blood_group_model_v3.h5')
+
+logger.info(f"Base directory: {BASE_DIR}")
+logger.info(f"Model directory: {MODEL_DIR}")
+logger.info(f"Model path: {MODEL_PATH}")
+logger.info(f"Model exists: {os.path.exists(MODEL_PATH)}")
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -64,20 +74,35 @@ def is_valid_bmp(file):
 class BloodGroupPredictor:
     def __init__(self, model_path=MODEL_PATH):
         """Initialize the predictor with model path"""
-        logger.info(f"Loading model from: {model_path}")
+        logger.info(f"Initializing BloodGroupPredictor with model path: {model_path}")
         self.classes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
         try:
             if not os.path.exists(model_path):
-                logger.error(f"Model file not found at: {model_path}")
-                raise FileNotFoundError(f"Model file not found at: {model_path}")
+                error_msg = f"Model file not found at: {model_path}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
             
             logger.info("Model file exists, attempting to load...")
-            self.model = tf.keras.models.load_model(model_path, compile=False)
-            self.model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-            logger.info("Model loaded and compiled successfully")
+            try:
+                self.model = tf.keras.models.load_model(model_path, compile=False)
+                logger.info("Model loaded successfully")
+                
+                # Compile the model
+                self.model.compile(
+                    optimizer='adam',
+                    loss='categorical_crossentropy',
+                    metrics=['accuracy']
+                )
+                logger.info("Model compiled successfully")
+                
+            except Exception as model_error:
+                logger.error(f"Error loading/compiling model: {str(model_error)}")
+                logger.error(traceback.format_exc())
+                raise
             
         except Exception as e:
-            logger.error(f"Error loading model: {str(e)}")
+            logger.error(f"Error in BloodGroupPredictor initialization: {str(e)}")
+            logger.error(traceback.format_exc())
             self.model = None
             raise
 
@@ -106,25 +131,31 @@ class BloodGroupPredictor:
             
         except Exception as e:
             logger.error(f"Error preprocessing image: {str(e)}")
+            logger.error(traceback.format_exc())
             raise
 
     def predict_blood_group(self, image_path=None, image_data=None):
         """Predict blood group from image path or image data"""
         try:
             if self.model is None:
-                logger.error("Model not loaded")
-                return {"error": "Model not loaded properly"}
+                error_msg = "Model not loaded properly"
+                logger.error(error_msg)
+                return {"error": error_msg}
             
             if image_path:
                 logger.info(f"Loading image from path: {image_path}")
                 if not os.path.exists(image_path):
-                    return {"error": "Image file not found"}
+                    error_msg = "Image file not found"
+                    logger.error(error_msg)
+                    return {"error": error_msg}
                 img = Image.open(image_path)
             elif image_data:
                 logger.info("Loading image from uploaded data")
                 img = Image.open(io.BytesIO(image_data))
             else:
-                return {"error": "No image provided"}
+                error_msg = "No image provided"
+                logger.error(error_msg)
+                return {"error": error_msg}
 
             # Preprocess image
             logger.info("Preprocessing image...")
@@ -156,6 +187,7 @@ class BloodGroupPredictor:
 
         except Exception as e:
             logger.error(f"Error during prediction: {str(e)}")
+            logger.error(traceback.format_exc())
             return {"error": str(e)}
 
 # Add a basic route for health checks
@@ -214,6 +246,7 @@ def upload_file():
             
         except Exception as e:
             logger.error(f"Error processing file: {str(e)}")
+            logger.error(traceback.format_exc())
             # Clean up file in case of error
             if os.path.exists(file_path):
                 try:
@@ -225,6 +258,7 @@ def upload_file():
             
     except Exception as e:
         logger.error(f"Unexpected error in upload_file: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
