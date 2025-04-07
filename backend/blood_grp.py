@@ -47,7 +47,7 @@ CORS(app, resources={
 # Constants
 IMG_HEIGHT = 64
 IMG_WIDTH = 64
-MODEL_PATH = 'model/blood_group_model_v3.h5'  # Fixed model path
+MODEL_PATH = 'model/blood_group_mode.h5'
 
 print(f"Using model path: {MODEL_PATH}")  # Debug print
 
@@ -318,6 +318,24 @@ def test_dataset(dataset_path):
         return summary
     except Exception as e:
         return {"error": str(e)}
+
+def is_valid_bmp(file):
+    """Check if the uploaded file is a valid BMP image."""
+    try:
+        # Check file extension
+        if not file.filename.lower().endswith('.bmp'):
+            return False, "File extension is not .bmp"
+        
+        # Check MIME type
+        file.seek(0)
+        header = file.read(2)
+        file.seek(0)
+        if header != b'BM':
+            return False, "File is not a valid BMP image"
+        
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 # Web Routes
 @app.route('/predict', methods=['POST'])
