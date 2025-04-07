@@ -61,6 +61,15 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Set the upload folder
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure the upload folder exists
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+    logger.info(f"Created upload folder at: {UPLOAD_FOLDER}")
+
 class BloodGroupPredictor:
     def __init__(self, model_path=MODEL_PATH):
         """Initialize the predictor with model path"""
